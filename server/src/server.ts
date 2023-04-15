@@ -18,6 +18,7 @@ import {
 	Range,
 	PublishDiagnosticsParams,
 	Position,
+	integer,
 } from 'vscode-languageserver/node';
 
 import {
@@ -236,8 +237,9 @@ function isAValidAddress(address: string, lcValue: string | undefined): boolean 
 	return true;
 }
 
-function resolveSymbols(strings: string[]): void {
+function resolveSymbols(strings: string[]): Map<string, string[]> {
 	const lcTable = new Map<string, string>();
+	const duplicatesLabels = new Map<string, string[]>();
 	let lc = 0;
 	ram = [];
 	addressToLine = new Map<number, number>();
@@ -265,6 +267,10 @@ function resolveSymbols(strings: string[]): void {
 		} else if (str === "END") {
 			break;
 		} else if ((str !== "") && (strings[i].includes(","))) {
+			const previousLabel = lcTable.get(str.replace(",", ""));
+			if (previousLabel !== undefined) {
+				duplicatesLabels.set(lc.toString(), [str.replace(",", ""), previousLabel]);
+			}
 			lcTable.set(str.replace(",", ""), lc.toString());
 		} else if (str === "") {
 			continue;
@@ -306,7 +312,7 @@ function resolveSymbols(strings: string[]): void {
 		lc++;
 	}
 
-	return;
+	return duplicatesLabels;
 }
 
 function spellChecking(strings: string[]): Diagnostic[] {
@@ -401,7 +407,8 @@ function syntaxChecking(strings: string[]): Diagnostic[] {
 			containsEND = true;
 			// Check instructions under the END pseudo-instruction
 			for (let j = i + 1; j < strings.length; j++) {
-				if (strings[j].trim() !== "") {
+				const evaluatedString = strings[j].trim();
+				if ((evaluatedString !== "") && !(evaluatedString.startsWith("/") || evaluatedString.startsWith(";") || evaluatedString.startsWith("#"))) {
 					const newRange = Range.create(
 						Position.create(j, 0),
 						Position.create(j, Number.MAX_VALUE)
@@ -507,10 +514,14 @@ function getMemoryAddressContent(address: string, isIMA: boolean): boolean {
 		address = isAValidDecimalValue(address) ? ram[parseInt(address.split(" ")[1].trim())] : isAValidHexadecimalValue(address) ? ram[parseInt(address.split(" ")[1].trim(), 16)] : ""; 
 	}
 
+	if (address === undefined) {
+		return false;
+	}
+
 	return (isAValidDecimalValue(address.slice(address.indexOf("DEC"))) || isAValidHexadecimalValue(address.slice(address.indexOf("HEX"))));
 }
 
-function logicChecking(strings: string[]): Diagnostic[] {
+function logicChecking(strings: string[], duplicatesLabels: Map<string, string[]>): Diagnostic[] {
 	const internalDiagnostics: Diagnostic[] = [];
 	const previousOrg: Map<number, number> = new Map<number, number>();
 
@@ -574,6 +585,15 @@ function logicChecking(strings: string[]): Diagnostic[] {
 		}
 	}
 
+	// Check for duplicate labels
+	for (const label of duplicatesLabels) {
+		const range: Range = Range.create(
+			Position.create((addressToLine.get(parseInt(label[0])) ?? Number.MAX_VALUE) - 1, 0),
+			Position.create((addressToLine.get(parseInt(label[0])) ?? Number.MAX_VALUE) - 1, Number.MAX_VALUE)
+		);
+		const diagnostic: Diagnostic = Diagnostic.create(range, `Duplicate label "${label[1][0]}" at previous line ${addressToLine.get(parseInt(label[1][1]))}!`, DiagnosticSeverity.Warning);
+		internalDiagnostics.push(diagnostic);
+	}
 	return internalDiagnostics;
 }
 
@@ -614,11 +634,11 @@ function analyzeCode(text: string): Diagnostic[] {
 	const strings = removeInlineComments(text);
 	
 	// Resolve the symbols to verify memory usage
-	resolveSymbols(strings);
+	const duplicatesLabels = resolveSymbols(strings);
 
 	diagnostics = diagnostics.concat(spellChecking(strings));
 	diagnostics = diagnostics.concat(syntaxChecking(strings));
-	diagnostics = diagnostics.concat(logicChecking(strings));
+	diagnostics = diagnostics.concat(logicChecking(strings, duplicatesLabels));
 
 	return diagnostics;
 }
