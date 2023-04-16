@@ -1,3 +1,4 @@
+/// This file contains various utility functions that are used inside the classes contained in the file './analyzer.ts'
 
 export function isAValidKeyword(str: string): boolean {
 	const keywords = ["ORG", "END", "DEC", "HEX", "AND", "ADD", "LDA", "STA", "BUN", "BSA", "ISZ", "CLA", "CLE", "CMA", "CME", "CIR", "CIL", "INC", "SPA", "SNA", "SZA", "SZE", "HLT", "INP", "OUT", "SKI", "SKO", "ION", "IOF"];
@@ -28,6 +29,23 @@ export function isAValidHexadecimalValue(str: string): boolean {
 	return (value <= 32767 && value >= -32768);
 }
 
+export function isAValidLabel(label: string): boolean {
+	const reservedKeywords = ["", "ORG", "END", "DEC", "HEX", "AND", "ADD", "LDA", "STA", "BUN", "BSA", "ISZ", "CLA", "CLE", "CMA", "CME", "CIR", "CIL", "INC", "SPA", "SNA", "SZA", "SZE", "HLT", "INP", "OUT", "SKI", "SKO", "ION", "IOF", "I"];
+	
+	// Check if the labels length is more than 3
+	if (label.length > 3) {
+		return false;
+	}
+
+	for (let i = 0; i < reservedKeywords.length; i++) {
+		if (label === reservedKeywords[i]) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 export function isAValidMRIInstruction(keyword: string): boolean {
 	const keywords = ["AND", "ADD", "LDA", "STA", "BUN", "BSA", "ISZ"];
 	
@@ -40,45 +58,44 @@ export function isAValidMRIInstruction(keyword: string): boolean {
 	return false;
 }
 
-export function isAValidRRIInstruction(instruction: string): boolean {
-	const keywords = ["CLA", "CLE", "CMA", "CME", "CIR", "CIL", "INC", "SPA", "SNA", "SZA", "SZE", "HLT"];
+function validateInstruction(instruction: string, keywords: string[]): boolean {
+	const temp: string[] = instruction.trim().split(" ");
+	const extractedInstruction: string = temp[temp.length - 1].trim();
 
 	for (let i = 0; i < keywords.length; i++) {
-		if (instruction === keywords[i]) {
+		if (extractedInstruction === keywords[i]) {
 			return true;
 		}
 	}
 
 	return false;
+}
+
+export function isAValidRRIInstruction(instruction: string): boolean {
+	const keywords = ["CLA", "CLE", "CMA", "CME", "CIR", "CIL", "INC", "SPA", "SNA", "SZA", "SZE", "HLT"];
+	return validateInstruction(instruction, keywords);
 }
 
 export function isAValidIOInstruction(instruction: string): boolean {
 	const keywords = ["INP", "OUT", "SKI", "SKO", "ION", "IOF"];
-
-	for (let i = 0; i < keywords.length; i++) {
-		if (instruction === keywords[i]) {
-			return true;
-		}
-	}
-
-	return false;
+	return validateInstruction(instruction, keywords);
 }
 
 export function isARRIInstuction(instruction: string): boolean {
 	const keywords = ["CLA", "CLE", "CMA", "CME", "CIR", "CIL", "INC", "SPA", "SNA", "SZA", "SZE", "HLT"];
-
+	
 	for (let i = 0; i < keywords.length; i++) {
 		if (instruction.includes(keywords[i])) {
 			return true;
 		}
 	}
-
+	
 	return false;
 }
 
 export function isAIOInstuction(instruction: string): boolean {
 	const keywords = ["INP", "OUT", "SKI", "SKO", "ION", "IOF"];
-
+	
 	for (let i = 0; i < keywords.length; i++) {
 		if (instruction.includes(keywords[i])) {
 			return true;

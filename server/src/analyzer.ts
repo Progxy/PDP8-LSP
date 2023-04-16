@@ -1,3 +1,5 @@
+/// This file contains the classes that are used for code analysis and code completion.
+
 import {
 	Diagnostic,
 	DiagnosticSeverity,
@@ -22,6 +24,7 @@ import {
 	isAValidHexadecimalValue, 
 	isAValidIOInstruction, 
 	isAValidKeyword, 
+	isAValidLabel, 
 	isAValidMRIInstruction, 
 	isAValidRRIInstruction, 
 	removeInlineComments
@@ -36,12 +39,18 @@ export class Analyzer {
 	problemsCountLimit: number;
 	ram: string[];
 	addressToLine: Map<number, number>;
+	duplicatesLabels: Map<string, string[]>;
+	unusedLabels: Map<string, number>;
+	invalidLabels: Map<string, number>;
 
 	constructor(problemsCountLimit: number) {
 		this.ram = [];
 		this.problemsCount = 0;
 		this.problemsCountLimit = problemsCountLimit; 
 		this.addressToLine = new Map<number, number>();
+		this.duplicatesLabels = new Map<string, string[]>();
+		this.unusedLabels = new Map<string, number>();
+		this.invalidLabels = new Map<string, number>();
 
 		// Initialize the ram content to 4096 bytes of space
 		for (let i = 0; i < 4096; i++) {
@@ -49,9 +58,8 @@ export class Analyzer {
 		}
 	}	
 
-	resolveSymbols(strings: string[]): Map<string, string[]> {
+	resolveSymbols(strings: string[]): void {
 		const lcTable = new Map<string, string>();
-		const duplicatesLabels = new Map<string, string[]>();
 		let lc = 0;
 		
 		// Initialize the ram content to 4096 bytes of space
@@ -76,15 +84,18 @@ export class Analyzer {
 				continue;
 			} else if (str === "END") {
 				break;
-			} else if ((str !== "") && (strings[i].includes(","))) {
+			} else if (isAValidLabel(str) && (strings[i].includes(","))) {
 				const previousLabel = lcTable.get(str.replace(",", ""));
 				if (previousLabel !== undefined) {
-					duplicatesLabels.set(lc.toString(), [str.replace(",", ""), previousLabel]);
+					this.duplicatesLabels.set(lc.toString(), [str.replace(",", ""), previousLabel]);
 				}
 				lcTable.set(str.replace(",", ""), lc.toString());
+				this.unusedLabels.set(str.replace(",", ""), i);
+			} else if (!isAValidLabel(str) && (strings[i].includes(","))) {
+				this.invalidLabels.set(str.replace(",", ""), i);
 			} else if (str === "") {
 				continue;
-			}
+			} 
 
 			lc++;
 		}
@@ -102,8 +113,8 @@ export class Analyzer {
 			}
 			
 			const temp = str.split(" ");
-			const instruction = temp[temp.length > 2 ? 1 : 0].trim();
-			const address = temp[(temp.length > 3) ? temp.length - 2 : temp.length - 1].trim();
+			const instruction = temp[str.includes(",") ? 1 : 0].trim();
+			const address = (temp[str.includes(",") ? 2 : 1] ?? "").trim();
 
 			if (instruction === "ORG") {
 				lc = isNaN(parseInt(address, 16)) ? lc : parseInt(address, 16);
@@ -111,9 +122,10 @@ export class Analyzer {
 			} else if (instruction === "END") {
 				break;
 			} else if (isAValidMRIInstruction(instruction)) {
-				this.ram[lc] = isAValidAddress(address, lcTable.get(address)) ? str.replace(address, lcTable.get(address) ?? `UNK-${address}|${i + 1}`) : str.replace(address, parseInt(address, 16).toString());
+				this.ram[lc] = isAValidAddress(address, lcTable.get(address)) ? (instruction + " " + address.replace(address, lcTable.get(address) ?? `UNK-${address}|${i + 1}`) + (temp.includes("I") ? " I" : "")) : (instruction + " " + address.replace(address, parseInt(address, 16).toString()) + (temp.includes("I") ? " I" : ""));
 				this.addressToLine.set(lc, i + 1);
 				lc++;
+				this.unusedLabels.delete(address);
 				continue;
 			}
 
@@ -122,7 +134,7 @@ export class Analyzer {
 			lc++;
 		}
 
-		return duplicatesLabels;
+		return;
 	}
 
 	spellChecking(strings: string[]): Diagnostic[] {
@@ -318,7 +330,7 @@ export class Analyzer {
 		return internalDiagnostics;
 	}
 
-	logicChecking(strings: string[], duplicatesLabels: Map<string, string[]>): Diagnostic[] {
+	logicChecking(strings: string[]): Diagnostic[] {
 		const internalDiagnostics: Diagnostic[] = [];
 		const previousOrg: Map<number, number> = new Map<number, number>();
 
@@ -349,6 +361,8 @@ export class Analyzer {
 
 		for (let i = 0; (i < 4096) && !(this.ram[i].trim().includes("END")) && (this.problemsCount < (this.problemsCountLimit - 1)); i++) {
 			const instruction = this.ram[i].split(" ")[0].trim();
+			const label = (this.ram[i].trim().split(" ")[2] ?? "").trim() === "I";
+
 			let line = this.addressToLine.get(i);
 			line = line === undefined ? 0 : line - 1;
 			const range = Range.create(
@@ -360,8 +374,8 @@ export class Analyzer {
 			if (instruction === "") {
 				continue;
 			}
-
-			if (isAValidMRIInstruction(instruction) && !this.getMemoryAddressContent(this.ram[parseInt(this.ram[i].split(" ")[1].trim())], instruction.includes("I"))) {
+			
+			if (isAValidMRIInstruction(instruction) && !this.getMemoryAddressContent(this.ram[parseInt(this.ram[i].split(" ")[1].trim())], label)) {
 				internalDiagnostics.push(Diagnostic.create(range, "The instruction address is pointing to an invalid memory address.", DiagnosticSeverity.Warning));
 				
 				// Increment problems counter
@@ -383,24 +397,49 @@ export class Analyzer {
 		}
 
 		// Check for duplicate labels
-		for (const label of duplicatesLabels) {
+		for (const label of this.duplicatesLabels) {
 			const range: Range = Range.create(
 				Position.create((this.addressToLine.get(parseInt(label[0])) ?? Number.MAX_VALUE) - 1, 0),
 				Position.create((this.addressToLine.get(parseInt(label[0])) ?? Number.MAX_VALUE) - 1, Number.MAX_VALUE)
 			);
-			const diagnostic: Diagnostic = Diagnostic.create(range, `Duplicate label "${label[1][0]}" at previous line ${this.addressToLine.get(parseInt(label[1][1]))}!`, DiagnosticSeverity.Warning);
+			const diagnostic: Diagnostic = Diagnostic.create(range, `Duplicate label: "${label[1][0]}" at previous line ${this.addressToLine.get(parseInt(label[1][1]))}`, DiagnosticSeverity.Warning);
+			internalDiagnostics.push(diagnostic);
+		}		
+		
+		// Check for unused labels
+		for (const label of this.unusedLabels) {
+			const range: Range = Range.create(
+				Position.create(label[1], 0),
+				Position.create(label[1], Number.MAX_VALUE)
+			);
+			const diagnostic: Diagnostic = Diagnostic.create(range, `Unused label: "${label[0]}", is better to remove it to prevent bad usage of the RAM`, DiagnosticSeverity.Information);
+			internalDiagnostics.push(diagnostic);
+		}		
+		
+		// Check for invalids labels
+		for (const label of this.invalidLabels) {
+			const range: Range = Range.create(
+				Position.create(label[1], 0),
+				Position.create(label[1], Number.MAX_VALUE)
+			);
+			const diagnostic: Diagnostic = Diagnostic.create(range, `Invalid label: "${label[0]}"`, DiagnosticSeverity.Error);
 			internalDiagnostics.push(diagnostic);
 		}
+
 		return internalDiagnostics;
 	}
 
 	getMemoryAddressContent(address: string, isIMA: boolean): boolean {
 		// Get the address if the given instuction address is using IMA
 		if (isIMA) {
-			address = isAValidDecimalValue(address) ? this.ram[parseInt(address.split(" ")[1].trim())] : isAValidHexadecimalValue(address) ? this.ram[parseInt(address.split(" ")[1].trim(), 16)] : ""; 
+			address = address.indexOf("DEC") == -1 ? address.indexOf("HEX") == -1 ? "#" : address.split("HEX")[1].trim() : address.split("DEC")[1].trim();
+			if (address === "#") {
+				return false;
+			}
+			address = isAValidDecimalValue(address) ? this.ram[parseInt(address)] : isAValidHexadecimalValue(address) ? this.ram[parseInt(address, 16)] : ""; 
 		}
 
-		if (address === undefined) {
+	if (address === "") {
 			return false;
 		}
 
@@ -420,11 +459,11 @@ export class Analyzer {
 		const strings = removeInlineComments(text);
 		
 		// Resolve the symbols to verify memory usage
-		const duplicatesLabels = this.resolveSymbols(strings);
+		this.resolveSymbols(strings);
 
 		diagnostics = diagnostics.concat(this.spellChecking(strings));
 		diagnostics = diagnostics.concat(this.syntaxChecking(strings));
-		diagnostics = diagnostics.concat(this.logicChecking(strings, duplicatesLabels));
+		diagnostics = diagnostics.concat(this.logicChecking(strings));
 
 		return diagnostics;
 	}

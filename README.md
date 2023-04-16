@@ -17,14 +17,14 @@ Pdp8-Linter github repo: [https://github.com/Progxy/pdp8Linter]
 	* Missing or invalid address inside ORG pseudo-instruction; 
 	* Invalid decimal/hexadecimal value inside DEC/HEX instruction;
 	* Unreachables instructions after END pseudo-instruction;
-	* Invalid IMA (Indirect Memory Addressing) inside MRI (Memory Reference Instruction) instructions;
+	* Invalid MRI (Memory Reference Instruction) instructions;
 	* Missing END pseudo-instruction or HLT instruction;
 	* Unresolved labels inside MRI instructions;
 	* Invalid RRI (Register Reference Instruction) instructions and IO instructions.
 - Logic Checking:
 	* Duplicate ORG pseudo-instruction;
-	* Duplicate labels;
-	* Valid address used inside MRI instructions (also if IMA is used);
+	* Duplicate/Unused/Invalid labels (is invalid if a keyword reserved to the language is used as a label);
+	* Valid address used inside MRI instructions (also if Indirect Memory Addressing is used);
 	* Check if any HLT instructions can be reached.
 
 ## Note
