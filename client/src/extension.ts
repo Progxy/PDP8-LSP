@@ -1,8 +1,3 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-
 import * as path from 'path';
 import { workspace, ExtensionContext } from 'vscode';
 
@@ -35,13 +30,14 @@ export function activate(context: ExtensionContext) {
 			options: debugOptions
 		}
 	};
+
 	// Options to control the language client
 	const clientOptions: LanguageClientOptions = {
 		// Register the server for plain text documents
 		documentSelector: [{ scheme: 'file', language: 'pdp8' }],
 		synchronize: {
-			// Notify the server about file changes to '.clientrc files contained in the workspace
-			fileEvents: workspace.createFileSystemWatcher('**/*.s')
+			// Notify the server about file changes to .s/.asm/.pdp8/.S files contained in the workspace
+			fileEvents: [workspace.createFileSystemWatcher('**/*.s'), workspace.createFileSystemWatcher('**/*.asm'), workspace.createFileSystemWatcher('**/*.pdp8'), workspace.createFileSystemWatcher('**/*.S')]
 		}
 	};
 
