@@ -17,6 +17,7 @@ import {
 import { 
 	getLabels, 
 	isAIOInstuction, 
+	isAKeyword, 
 	isARRIInstuction,
 	isAValidAddress,
 	isAValidAddressValue, 
@@ -113,7 +114,7 @@ export class Analyzer {
 			}
 			
 			const temp = str.split(" ");
-			const instruction = temp[str.includes(",") ? 1 : 0].trim();
+			const instruction = (temp[str.includes(",") ? 1 : 0] ?? "").trim();
 			const address = (temp[str.includes(",") ? 2 : 1] ?? "").trim();
 
 			if (instruction === "ORG") {
@@ -361,7 +362,6 @@ export class Analyzer {
 
 		for (let i = 0; (i < 4096) && !(this.ram[i].trim().includes("END")) && (this.problemsCount < (this.problemsCountLimit - 1)); i++) {
 			const instruction = this.ram[i].split(" ")[0].trim();
-			const label = (this.ram[i].trim().split(" ")[2] ?? "").trim() === "I";
 
 			let line = this.addressToLine.get(i);
 			line = line === undefined ? 0 : line - 1;
@@ -375,7 +375,7 @@ export class Analyzer {
 				continue;
 			}
 			
-			if (isAValidMRIInstruction(instruction) && !this.getMemoryAddressContent(this.ram[parseInt(this.ram[i].split(" ")[1].trim())], label)) {
+			if (isAValidMRIInstruction(instruction) && !this.getMemoryAddressContent(this.ram[parseInt(this.ram[i].split(" ")[1].trim())])) {
 				internalDiagnostics.push(Diagnostic.create(range, "The instruction address is pointing to an invalid memory address.", DiagnosticSeverity.Warning));
 				
 				// Increment problems counter
@@ -429,21 +429,12 @@ export class Analyzer {
 		return internalDiagnostics;
 	}
 
-	getMemoryAddressContent(address: string, isIMA: boolean): boolean {
-		// Get the address if the given instuction address is using IMA
-		if (isIMA) {
-			address = address.indexOf("DEC") == -1 ? address.indexOf("HEX") == -1 ? "#" : address.split("HEX")[1].trim() : address.split("DEC")[1].trim();
-			if (address === "#") {
-				return false;
-			}
-			address = isAValidDecimalValue(address) ? this.ram[parseInt(address)] : isAValidHexadecimalValue(address) ? this.ram[parseInt(address, 16)] : ""; 
-		}
-
-	if (address === "") {
+	getMemoryAddressContent(address: string): boolean {
+		if (address === "" || address === undefined) {
 			return false;
 		}
 
-		return (isAValidDecimalValue(address.slice(address.indexOf("DEC"))) || isAValidHexadecimalValue(address.slice(address.indexOf("HEX"))));
+		return isAKeyword(address);
 	}
 
 	analyzeCode(text: string): Diagnostic[] {

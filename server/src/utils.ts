@@ -12,6 +12,18 @@ export function isAValidKeyword(str: string): boolean {
 	return false;
 }
 
+export function isAKeyword(str: string): boolean {
+	const keywords = ["ORG", "END", "DEC", "HEX", "AND", "ADD", "LDA", "STA", "BUN", "BSA", "ISZ", "CLA", "CLE", "CMA", "CME", "CIR", "CIL", "INC", "SPA", "SNA", "SZA", "SZE", "HLT", "INP", "OUT", "SKI", "SKO", "ION", "IOF"];
+	
+	for (let i = 0; i < keywords.length; i++) {
+		if (str.includes(keywords[i])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 export function isAValidDecimalValue(str: string): boolean {
 	str = str.replace("DEC", "").trim();
 	const value = parseInt(str, 10);
