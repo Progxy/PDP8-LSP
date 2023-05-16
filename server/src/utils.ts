@@ -33,7 +33,7 @@ export function isAValidDecimalValue(str: string): boolean {
 export function isAValidHexadecimalValue(str: string): boolean {
 	str = str.replace("HEX", "").trim();
 	for (let i = 0; i < str.length; i++) {
-		if (isNaN(parseInt(str[i], 16))) {
+		if (isNaN(parseInt(str[i], 16)) && str[i] != "-") {
 			return false;
 		}	
 	}
